@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>感光可变字体手机实验室</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght,wdth,slnt,GRAD@8..144,100..1000,25..151,-10..0,-200..150&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --accent: #00ffcc;
+            --bg: #000;
+        }
+        
+        * {
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg);
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Roboto Flex', sans-serif;
+            overflow: hidden;
+        }
+
+        /* 核心文字交互区：使用 vw 单位适配手机屏幕 */
+        #interaction-text {
+            width: 100%;
+            text-align: center;
+            line-height: 0.9;
+            font-size: 22vw; 
+            /* 初始轴设置 */
+            font-variation-settings: 'wght' 400, 'wdth' 100, 'slnt' 0, 'GRAD' 0, 'opsz' 144;
+            will-change: font-variation-settings, font-size;
+            word-wrap: break-word;
+            padding: 0 10px;
+        }
+
+        /* 底部 UI 面板：针对手机手势优化 */
+        .ui-panel {
+            position: fixed;
+            bottom: env(safe-area-inset-bottom, 20px);
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 400px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            padding: 12px;
+            border-radius: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 100;
+        }
+
+        #cam-preview {
+            width: 60px;
+            height: 45px;
+            border-radius: 10px;
+            transform: scaleX(-1); /* 镜像预览 */
+            background: #111;
+            object-fit: cover;
+            border: 1px solid var(--accent);
+        }
+
+        .status-box {
+            flex-grow: 1;
+            margin-left: 15px;
+        }
+
+        .data-info {
+            font-family: monospace;
+            font-size: 11px;
+            color: var(--accent);
+            text-transform: uppercase;
+        }
+
+        .hint-text {
+            position: fixed;
+            top: 40px;
+            font-size: 12px;
+            color: rgba(255,255,255,0.5);
+            text-align: center;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="hint-text">对着光源调节手机角度，观察文字形态变化</div>
+
+    <div id="interaction-text">MORPH</div>
+
+    <div class="ui-panel">
+        <video id="cam-preview" autoplay muted playsinline></video>
+        <div class="status-box">
+            <div class="data-info">光感强度: <span id="label-light">--</span></div>
+            <div class="data-info" id="status-tag">初始化中...</div>
+        </div>
+    </div>
+
+    <canvas id="calc-canvas" style="display:none;"></canvas>
+
+    <script>
+        const textElement = document.getElementById('interaction-text');
+        const video = document.getElementById('cam-preview');
+        const canvas = document.getElementById('calc-canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const labelLight = document.getElementById('label-light');
+        const statusTag = document.getElementById('status-tag');
+
+        let minB = 1.0, maxB = 0.0; 
+        let smoothB = 0.5;
+
+        async function initCamera() {
+            try {
+                // 强制请求前置摄像头以便自拍交互
+                const constraints = { 
+                    video: { 
+                        facingMode: "user",
+                        width: { ideal: 160 },
+                        height: { ideal: 120 }
+                    } 
+                };
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                statusTag.innerText = "已激活";
+                requestAnimationFrame(update);
+            } catch (e) {
+                statusTag.innerText = "错误：未检测到摄像头";
+                statusTag.style.color = "#ff4444";
+                textElement.style.fontSize = "16px";
+                textElement.innerText = "请在 HTTPS 环境下打开并允许摄像头访问";
+            }
+        }
+
+        function update() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = 40; 
+                canvas.height = 30;
+                ctx.drawImage(video, 0, 0, 40, 30);
+                const pixels = ctx.getImageData(0, 0, 40, 30).data;
+
+                let brightness = 0;
+                for (let i = 0; i < pixels.length; i += 4) {
+                    brightness += (pixels[i] + pixels[i+1] + pixels[i+2]) / 3;
+                }
+                const raw = (brightness / (pixels.length / 4)) / 255;
+
+                // 自动增益校准：学习当前环境的光线范围
+                if (raw < minB) minB = raw;
+                if (raw > maxB) maxB = raw;
+                let range = maxB - minB;
+                let normalized = range > 0.05 ? (raw - minB) / range : 0.5;
+
+                // 平滑过渡
+                smoothB += (normalized - smoothB) * 0.12;
+
+                applyMobileStyles(smoothB);
+            }
+            requestAnimationFrame(update);
+        }
+
+        function applyMobileStyles(light) {
+            const inv = 1 - light; // 0=亮, 1=暗
+
+            // 映射可变字体轴
+            const wght = 100 + (inv * 900);    // 越暗越粗
+            const wdth = 25 + (inv * 126);    // 越暗越宽
+            const slnt = light * -10;         // 越亮越斜
+            const grad = -200 + (inv * 350);  // 越暗级差越高
+            const opsz = 8 + (light * 136);   // 视觉尺寸调节
+
+            textElement.style.fontVariationSettings = `
+                'wght' ${wght}, 
+                'wdth' ${wdth},
+                'slnt' ${slnt},
+                'GRAD' ${grad},
+                'opsz' ${opsz}
+            `;
+
+            labelLight.innerText = Math.round(light * 100) + "%";
+        }
+
+        initCamera();
+
+        // 禁止移动端缩放手势影响体验
+        document.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 1) e.preventDefault();
+        }, { passive: false });
+    </script>
+</body>
+</html>
