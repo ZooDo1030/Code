@@ -1,13 +1,46 @@
 {
   "manifest_version": 3,
-  "name": "寻词 · Pinterest 绘画参考助手",
-  "version": "0.1.0",
-  "description": "在 Pinterest 搜索框内把中文想法变成适合绘画、插画和物件参考的英文搜索词。",
-  "permissions": ["storage"],
-  "host_permissions": ["https://www.pinterest.com/*", "https://www.pinterest.co.uk/*", "https://www.pinterest.jp/*", "https://www.pinterest.fr/*", "https://www.pinterest.de/*", "https://www.pinterest.ca/*", "https://www.pinterest.com.au/*"],
-  "optional_host_permissions": ["https://*/*"],
-  "background": {"service_worker": "background.js"},
+  "name": "寻词 · Pinterest 中文直译",
+  "version": "0.2.0",
+  "description": "在 Pinterest 搜索框输入中文，旁边自动显示一条英文翻译，点击直接搜索。",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.pinterest.com/*",
+    "https://www.pinterest.co.uk/*",
+    "https://www.pinterest.jp/*",
+    "https://www.pinterest.fr/*",
+    "https://www.pinterest.de/*",
+    "https://www.pinterest.ca/*",
+    "https://www.pinterest.com.au/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "options_page": "options.html",
-  "action": {"default_title": "设置寻词 AI 服务"},
-  "content_scripts": [{"matches": ["https://www.pinterest.com/*", "https://www.pinterest.co.uk/*", "https://www.pinterest.jp/*", "https://www.pinterest.fr/*", "https://www.pinterest.de/*", "https://www.pinterest.ca/*", "https://www.pinterest.com.au/*"], "js": ["dictionary.js", "content.js"], "run_at": "document_idle"}]
+  "action": {
+    "default_title": "设置寻词 AI 服务"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.pinterest.com/*",
+        "https://www.pinterest.co.uk/*",
+        "https://www.pinterest.jp/*",
+        "https://www.pinterest.fr/*",
+        "https://www.pinterest.de/*",
+        "https://www.pinterest.ca/*",
+        "https://www.pinterest.com.au/*"
+      ],
+      "js": [
+        "dictionary.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

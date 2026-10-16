@@ -10,7 +10,7 @@ document.querySelector('#settings').addEventListener('submit', async event => {
     const granted = await chrome.permissions.request({origins: [url.origin + '/*']});
     if (!granted) throw Error('未授权此域名，配置未保存。');
     await chrome.storage.local.set(data);
-    status.textContent = '已保存。回到 Pinterest 点击「生成建议」即可验证连接。';
+    status.textContent = '已保存。回到 Pinterest 输入中文即可自动翻译。启用后，中文搜索内容会自动发送给此服务。';
   } catch (error) {status.textContent = error.message;}
 });
 document.querySelector('#clear').addEventListener('click', async () => {await chrome.storage.local.remove(ids); for (const id of ids) document.getElementById(id).value = ''; document.querySelector('#status').textContent = 'AI 配置已清除，恢复本地词库模式。';});
