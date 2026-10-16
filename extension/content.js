@@ -3,14 +3,14 @@
   const host = document.createElement('div'); host.id = 'xunci-extension';
   const root = host.attachShadow({mode: 'closed'});
   root.innerHTML = `<style>
-:host{all:initial;position:fixed;z-index:2147483646;font:13px/1.5 system-ui,"PingFang SC",sans-serif;color:#35452b}*{box-sizing:border-box}.box{display:flex;gap:9px;align-items:center;max-width:min(420px,calc(100vw - 24px));padding:10px 13px;background:#f7faF2;border:1px solid #d4dfc8;border-radius:12px;box-shadow:0 4px 18px #0001}.hidden{display:none}button{font:inherit;cursor:pointer}.translation{border:0;background:none;color:#405d2b;font-weight:600;text-align:left;overflow-wrap:anywhere;padding:0}.translation:hover{text-decoration:underline}.translation:disabled{cursor:default;text-decoration:none}.status{color:#7b856f;font-size:12px}.settings{border:0;border-left:1px solid #d4dfc8;padding:0 0 0 9px;background:none;color:#78856d;white-space:nowrap;font-size:11px}button:focus-visible{outline:2px solid #71865a;outline-offset:3px}
-</style><div class="box hidden" role="region" aria-label="中文转英文"><span class="status" role="status" aria-live="polite"></span><button class="translation hidden" title="点击用英文搜索"></button><button class="settings" title="翻译设置">设置</button></div>`;
+:host{all:initial;position:fixed;z-index:2147483646;font:13px/1.5 system-ui,"PingFang SC",sans-serif;color:#35452b}*{box-sizing:border-box}.box{display:flex;gap:9px;align-items:center;max-width:min(420px,calc(100vw - 24px));padding:10px 13px;background:#f7faF2;border:1px solid #d4dfc8;border-radius:12px;box-shadow:0 4px 18px #0001}.hidden{display:none}button{font:inherit;cursor:pointer}.translation{border:0;background:none;color:#405d2b;font-weight:600;text-align:left;overflow-wrap:anywhere;padding:0}.translation:hover{text-decoration:underline}.translation:disabled{cursor:default;text-decoration:none}.status{color:#7b856f;font-size:12px}.retry{font:inherit;border:0;background:none;color:#526d3c;cursor:pointer;white-space:nowrap}.settings{border:0;border-left:1px solid #d4dfc8;padding:0 0 0 9px;background:none;color:#78856d;white-space:nowrap;font-size:11px}button:focus-visible{outline:2px solid #71865a;outline-offset:3px}
+</style><div class="box hidden" role="region" aria-label="中文转英文"><span class="status" role="status" aria-live="polite"></span><button class="translation hidden" title="点击用英文搜索"></button><button class="retry hidden">重试</button><button class="settings" title="翻译信息与暂停">⋯</button></div>`;
   document.documentElement.append(host);
   const $ = s => root.querySelector(s);
   let input, timer, sequence = 0, composing = false, current = '', translated = '', active = false;
   const cache = new Map();
   const hasChinese = text => /[\u3400-\u9fff]/.test(text);
-  function hide() {active = false;$('.box').classList.add('hidden');}
+  function hide() {$('.retry').classList.add('hidden');active = false;$('.box').classList.add('hidden');}
   function place() {
     if (!input?.isConnected) {hide();return;}
     const r = input.getBoundingClientRect();
@@ -23,28 +23,36 @@
     }
     host.style.maxWidth = width + 'px';
   }
-  function status(text) {translated = '';$('.translation').classList.add('hidden');$('.status').classList.remove('hidden');$('.status').textContent = text;active = true;$('.box').classList.remove('hidden');place();}
-  function show(text, mode) {translated = text;$('.status').classList.add('hidden');$('.translation').classList.remove('hidden');$('.translation').textContent = text + ' ↗';$('.translation').title = (mode === 'local' ? '词库翻译' : 'AI 翻译') + ' · 点击用英文搜索';active = true;$('.box').classList.remove('hidden');place();}
+  function status(text, retry = false) {$('.retry').classList.toggle('hidden', !retry);translated = '';$('.translation').classList.add('hidden');$('.status').classList.remove('hidden');$('.status').textContent = text;active = true;$('.box').classList.remove('hidden');place();}
+  function show(text) {$('.retry').classList.add('hidden');translated = text;$('.status').classList.add('hidden');$('.translation').classList.remove('hidden');$('.translation').textContent = text + ' ↗';$('.translation').title = '点击用英文搜索';active = true;$('.box').classList.remove('hidden');place();}
   function invalidate() {clearTimeout(timer);sequence++;current = '';translated = '';hide();}
   async function translate(text, id) {
     try {
       const response = await chrome.runtime.sendMessage({type: 'translate', text});
       if (id !== sequence || input?.value.trim() !== text) return;
       if (!response || response.error) throw Error(response?.error || '请刷新 Pinterest 后重试');
-      const result = response.mode === 'local' ? globalThis.xunciLocal(text) : response;
-      if (!result.translation) {status(result.error || '这句话需要在设置中启用 AI 翻译');return;}
-      cache.set(text, result);if (cache.size > 64) cache.delete(cache.keys().next().value);
-      show(result.translation, result.mode || response.mode);
-    } catch (error) {if (id === sequence) status(error.message || '翻译失败，请稍后重新输入');}
+      if (response.paused) {hide();return;}
+      let textResult = response.translation;
+      if (typeof textResult !== 'string' || !textResult.trim()) throw Error('未收到翻译，请重试');
+      if (response.encoded) {
+        // Decode the provider's HTML entities as inert text; never insert provider HTML.
+        const doc = new DOMParser().parseFromString(textResult, 'text/html');
+        textResult = doc.documentElement.textContent;
+      }
+      if (!textResult.trim()) throw Error('未收到翻译，请重试');
+      cache.set(text, textResult);if (cache.size > 64) cache.delete(cache.keys().next().value);
+      show(textResult);
+    } catch (error) {if (id === sequence) status(error.message || '翻译失败，请稍后重试', true);}
   }
+
   function update() {
     if (!input || composing) return;
     const text = input.value.trim();
     if (text === current) return;
     invalidate(); current = text;
     if (!hasChinese(text)) return;
-    if (text.length > 300) {status('最多支持 300 字');return;}
-    if (cache.has(text)) {const result = cache.get(text);show(result.translation, result.mode);return;}
+    if (text.length > 150) {status('最多支持 150 字');return;}
+    if (cache.has(text)) {show(cache.get(text));return;}
     status('翻译中…'); const id = sequence;
     timer = setTimeout(() => translate(text, id), 500);
   }
@@ -63,8 +71,9 @@
     if (!translated || input?.value.trim() !== current) return;
     const url = new URL('/search/pins/', location.origin);url.searchParams.set('q', translated);location.assign(url.href);
   });
+  $('.retry').addEventListener('click', () => {current = '';update();});
   $('.settings').addEventListener('click', () => chrome.runtime.sendMessage({type: 'open-options'}));
-  chrome.storage?.onChanged.addListener((changes, area) => {if (area === 'local' && ['endpoint','apiKey','model'].some(k => k in changes)) {cache.clear();invalidate();update();}});
+  chrome.storage?.onChanged.addListener((changes, area) => {if (area === 'local' && ['enabled'].some(k => k in changes)) {cache.clear();invalidate();update();}});
   let queued = false;
   const schedule = () => {if (!queued) {queued = true;requestAnimationFrame(() => {queued = false;locate();});}};
   new MutationObserver(schedule).observe(document.body, {childList: true, subtree: true});

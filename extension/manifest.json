@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "寻词 · Pinterest 中文直译",
-  "version": "0.2.0",
-  "description": "在 Pinterest 搜索框输入中文，旁边自动显示一条英文翻译，点击直接搜索。",
+  "version": "0.3.0",
+  "description": "无需密钥：在 Pinterest 输入中文，自动显示英文翻译，点击即可搜索。",
   "permissions": [
     "storage"
   ],
@@ -13,17 +13,16 @@
     "https://www.pinterest.fr/*",
     "https://www.pinterest.de/*",
     "https://www.pinterest.ca/*",
-    "https://www.pinterest.com.au/*"
-  ],
-  "optional_host_permissions": [
-    "https://*/*"
+    "https://www.pinterest.com.au/*",
+    "https://api.mymemory.translated.net/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "options_page": "options.html",
   "action": {
-    "default_title": "设置寻词 AI 服务"
+    "default_title": "寻词 · 自动翻译",
+    "default_popup": "options.html"
   },
   "content_scripts": [
     {
@@ -37,7 +36,6 @@
         "https://www.pinterest.com.au/*"
       ],
       "js": [
-        "dictionary.js",
         "content.js"
       ],
       "run_at": "document_idle"
