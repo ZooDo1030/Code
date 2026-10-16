@@ -1,0 +1,52 @@
+const {chromium}=require('playwright');
+const path=require('node:path');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const assert=require('node:assert/strict');
+(async()=>{
+ const ext=path.resolve(__dirname,'..');
+ let listener;
+ const sandbox={chrome:{action:{onClicked:{addListener(){}}},runtime:{onMessage:{addListener(fn){listener=fn}},openOptionsPage(){}},storage:{local:{async get(){return {endpoint:'https://model.example/v1/chat/completions',model:'test',apiKey:'test-not-a-secret'}}}},permissions:{async contains(){return true}}},URL,AbortSignal,fetch:async()=>({ok:true,json:async()=>({choices:[{message:{content:JSON.stringify({items:[{query:'glass caustics reference',explanation:'折射光斑'},{query:'sunlit glass still life',explanation:'静物光影'},{query:'glass refraction study',explanation:'折射研究'}]})}}]})})};
+ vm.runInNewContext(fs.readFileSync(path.join(ext,'background.js'),'utf8'),sandbox);
+ const message=m=>new Promise(resolve=>listener(m,{},resolve));
+ assert.equal((await message({type:'suggest',text:'玻璃杯光影',direction:'drawing'})).items.length,3);
+ sandbox.fetch=async()=>({ok:false,status:401});assert.match((await message({type:'suggest',text:'玻璃',direction:'drawing'})).error,/密钥/);
+ sandbox.fetch=async()=>({ok:true,json:async()=>({choices:[{message:{content:'not JSON'}}]})});assert.match((await message({type:'suggest',text:'玻璃',direction:'drawing'})).error,/有效/);
+ console.log('PASS mocked AI: valid response, unauthorized response, invalid JSON');
+ const instance=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+ const browser=await instance.newContext();
+ try {
+ const page=await browser.newPage();
+ await page.route('https://www.pinterest.com/**',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html><body><header style="padding:20px"><input data-test-id="search-box-input" placeholder="Search" style="width:60vw;height:44px"></header><main>Pinterest test fixture</main></body></html>'}));
+ await page.goto('https://www.pinterest.com/');
+ await page.addScriptTag({content:'window.chrome={runtime:{sendMessage:async()=>({mode:"local"})}}'});
+ await page.addScriptTag({path:path.join(ext,'dictionary.js')});
+ await page.addScriptTag({path:path.join(ext,'content.js')});
+ await page.waitForSelector('#xunci-extension');
+ const cdp=await browser.newCDPSession(page);
+ const tree=await cdp.send('DOM.getDocument',{depth:-1,pierce:true});
+ function find(n){if(n.attributes?.includes('xunci-extension'))return n;for(const c of [...n.children||[],...n.shadowRoots||[]]){const r=find(c);if(r)return r;}}
+ const host=find(tree.root);assert.ok(host?.shadowRoots?.[0]);
+ const {object}=await cdp.send('DOM.resolveNode',{nodeId:host.shadowRoots[0].nodeId});
+ const run=async fn=>{const r=await cdp.send('Runtime.callFunctionOn',{objectId:object.objectId,functionDeclaration:fn,returnByValue:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
+ await page.locator('input').fill('阳光透过玻璃杯的光影');
+ await page.waitForTimeout(650);
+ assert.equal(await run('function(){return this.querySelector(".panel").classList.contains("hidden")}'),false);
+ await run('function(){this.querySelector(".generate").click()}');
+ await page.waitForTimeout(300);
+ assert.equal(await run('function(){return this.querySelectorAll(".item").length}'),3);
+ assert.match(await run('function(){return this.querySelector(".notice").textContent}'),/本地词库/);
+ assert.match(await run('function(){return this.querySelector(".query").textContent}'),/glass/);
+ await run('function(){this.querySelector("select").value="objects";this.querySelector("select").dispatchEvent(new Event("change"));this.querySelector(".generate").click()}');
+ await page.waitForTimeout(300);
+ assert.match(await run('function(){return this.querySelector(".query").textContent}'),/object reference photo/);
+ const navigation=page.waitForURL('**/search/pins/**');await run('function(){this.querySelector(".search").click()}');await navigation;
+ assert.match(new URL(page.url()).searchParams.get('q'),/glass.*object reference photo/);
+ await page.addScriptTag({content:'window.chrome={runtime:{sendMessage:async()=>({mode:"local"})}}'});
+ await page.addScriptTag({path:path.join(ext,'dictionary.js')});
+ await page.addScriptTag({path:path.join(ext,'content.js')});
+ await page.waitForSelector('#xunci-extension');
+ assert.equal(await page.locator('#xunci-extension').count(),1);
+ console.log('PASS browser fixture: Chinese input opens panel, local suggestions, context change, current-tab Pinterest navigation, reinjection');
+ }finally{await instance.close();}
+})().catch(e=>{console.error(e);process.exit(1)});
