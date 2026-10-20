@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "寻词 · Pinterest 中文直译",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "优先使用 Chrome 本机翻译：Pinterest 输入中文自动显示英文，点击搜索。首次需下载语言包。",
   "permissions": [
     "storage"

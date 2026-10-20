@@ -4,20 +4,8 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const assert=require('node:assert/strict');
 (async()=>{
- const ext=path.resolve(__dirname,'..');let listener,requestURL,calls=0,enabled=true;
- const sandbox={chrome:{runtime:{onInstalled:{addListener(){}},onMessage:{addListener(fn){listener=fn}},openOptionsPage(){}},storage:{local:{async get(){return {enabled}}}}},URL,AbortSignal,TypeError,fetch:async url=>{calls++;requestURL=new URL(url);return {ok:true,json:async()=>({responseStatus:200,quotaFinished:'false',responseData:{translatedText:'Light passing through a glass'}})}}};
- vm.runInNewContext(fs.readFileSync(path.join(ext,'background.js'),'utf8'),sandbox);
- const message=text=>new Promise(resolve=>listener({type:'translate',text},{},resolve));
- assert.equal((await message('阳光透过玻璃杯')).translation,'Light passing through a glass');
- assert.equal(requestURL.origin,'https://api.mymemory.translated.net');
- assert.equal(requestURL.searchParams.get('q'),'阳光透过玻璃杯');assert.equal(requestURL.searchParams.get('langpair'),'zh-CN|en');
- await message('阳光透过玻璃杯');assert.equal(calls,1);
- enabled=false;assert.equal((await message('暂停测试')).paused,true);assert.equal(calls,1);enabled=true;
- sandbox.fetch=async()=>({ok:false,status:429});assert.match((await message('限额测试')).error,/额度/);
- sandbox.fetch=async()=>({ok:true,json:async()=>({responseStatus:403})});assert.match((await message('服务错误')).error,/不可用/);
- sandbox.fetch=async()=>({ok:true,json:async()=>({responseStatus:200,responseData:{translatedText:'中文'}})});assert.match((await message('原文未翻译')).error,/完整翻译/);
- sandbox.fetch=async()=>{throw new TypeError('network')};assert.match((await message('网络错误')).error,/无法连接/);
- console.log('PASS no-key service: correct API request, response, cache, pause, quota, provider errors, incomplete translation, network errors');
+ const ext=path.resolve(__dirname,'..');
+ await require('./service.cjs')();
  const instance=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
  const browser=await instance.newContext();
  try {

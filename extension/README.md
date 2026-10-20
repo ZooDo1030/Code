@@ -1,30 +1,31 @@
-# 寻词：Pinterest 中文直译（0.4.0）
+# 寻词：Pinterest 中文直译（0.4.1）
 
-在 Pinterest 搜索框输入中文，停顿后自动显示一条英文，点击直接搜索。不分类、不推荐。不需要账号、API 密钥或模型配置。
+在 Pinterest 原有搜索框输入中文，停顿后显示一条英文，点击直接在当前页搜索。不分类、不推荐、无需密钥。
 
-## 这次修复
+## 安装与更新
 
-- 优先调用 Chrome 的 Translator API 在本机翻译，不消耗 MyMemory 每日免费额度。
-- 本机首次缺少语言包时，明确显示「启用本机翻译」。点击后由 Chrome 下载中文转英文语言包，显示进度；后续自动翻译。下载需用户点击、网络、可用磁盘及浏览器支持。下载失败会提示，不能保证每台电脑都能使用。
-- 不支持本机翻译的浏览器保留 MyMemory 在线模式，该模式仍受每日额度限制。
-- 严格识别服务的 quotaFinished，只将布尔 true 或字符串 "true" 当作耗尽，不将 "false" 当成 true。
-- 搜索框被网站直接清空、未触发 input 事件时，也会移除旧译文/错误提示。
-- 信息页不再反复发送“你好”消耗在线额度，仅检查本机能力。
+下载仓库 `downloads/xunci-extension-0.4.1.zip` 并解压。Chrome 打开 `chrome://extensions`，启用开发者模式，加载解压出的 `xunci-extension` 文件夹。
 
-## Mac 安装与更新
+已有旧版可把新文件替换到原先加载的文件夹，再点击扩展卡片的重新加载并刷新 Pinterest。不要保留两个寻词安装实例。插件信息页和扩展管理页的版本均应为 **0.4.1**。未通过应用商店发布，因此没有自动更新。
 
-从 GitHub `codex/xunci-pinterest-extension` 分支点击 Code → Download ZIP，解压。把新版 `extension` 文件夹内容替换到之前加载的文件夹。在 `chrome://extensions` 中重新加载寻词，并刷新 Pinterest。也可移除旧版后加载新版。
+## 工作方式
 
-扩展管理页版本应为 0.4.0。使用当前稳定版桌面 Chrome；Safari 不支持。本机模式以浏览器实际能力检测为准，不要求修改实验性 flags。首次在 Pinterest 输入中文，若出现「启用本机翻译」，点击一次并等待语言包完成。已有语言包会直接翻译，无需再次点击。
+优先使用 Chrome Translator API。已有中文转英文语言包时自动在本机翻译；首次缺少模型时会显示「启用本机翻译」，需要点击并联网下载。该功能以浏览器实际支持为准，不要求改实验性 flags。
 
-## 隐私和限制
+浏览器缺少本机引擎或本机调用失败时，尝试 MyMemory 在线翻译。**在线模式有免费额度和网络限制**，不能保证无限或始终可用。下载语言包可能失败；超时、限流或其他失败会显示提示，不伪造译文。
 
-本机模式不向 MyMemory 发送原文，语言包由 Chrome 管理。无法提供本机模式时的在线翻译使用 `https://api.mymemory.translated.net/get`，发送中文搜索框原文，不发送 Pinterest 页面、图片、账号或 Cookie。免费额度和网络可用性由服务商决定。扩展图标中的开关可暂停所有翻译。缓存仅存于内存。旧版 AI 密钥配置在扩展更新时被清除。
+输入停顿约半秒后翻译；不在输入法选字时发送请求。最多 150 字。空/纯英文输入不翻译；Esc 或点击其他区域收起提示。点扩展图标可查看状态、暂停/恢复。鼠标移到英文上可查看本机/在线来源。
 
-支持 www.pinterest.com、co.uk、jp、fr、de、ca、com.au，最多 150 字中文搜索文本。
+## 隐私
 
-## 验证与已知边界
+本机模式不向 MyMemory 发送原文。在线模式会发送中文搜索框内容（包括打开已有中文查询的页面），但不发送 Pinterest 页面、图片、账号、Cookie 或来源页信息。缓存只在内存；后台限流冷却时间保存在浏览器会话中，不含查询原文。暂停会取消请求，已经发出的内容无法撤回。旧 AI 密钥配置在更新时清理，不再使用。
 
-`node extension/tests/smoke.cjs` 需要 Node.js、Playwright 和 Chromium。测试包括在线请求/额度解析、缓存/暂停/错误、本机 API 模拟下载及自动翻译、真实点击激活、无在线请求、输入法/防抖/忽略旧结果、未触发 input 的清空、Esc 和当前页跳转。
+支持的 Pinterest 域名在 manifest 中明确声明。Safari/手机 Pinterest App 不支持；Chrome/Edge 的本机能力由版本及环境决定。
 
-实际 Chromium 154 主世界和隔离世界均检测到 Translator API，中文转英文状态为 downloadable。尝试真实模型下载在云端 20 秒后超时，未获得真实本机译文；因此本机模型可下载和实际翻译质量仍未完成端到端验证。在线 MyMemory 的真实请求也受云端网络策略限制。模拟测试通过不代表真实模型/网站已完全验证。
+## 自查与开发
+
+完整自查结果、已修复问题及剩余风险见 [AUDIT.md](AUDIT.md)。**自动化通过不代表真实引擎通过**：本次真实模型下载 120 秒超时，真实网站和在线接口受云端网络策略阻断。
+
+- 自动化：`node extension/tests/all.cjs`，需 Node.js、Playwright、Chromium。
+- 真实本机引擎：`node extension/tests/live-native.cjs`，不模拟 Translator；下载/翻译失败保留非零退出状态。
+- 打包：`python3 extension/tools/package.py`，不需要第三方 Python 包。
