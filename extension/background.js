@@ -15,7 +15,7 @@ async function translate(text) {
     if (response.status === 429) throw Error('免费翻译额度暂时用完，请稍后再试');
     if (!response.ok) throw Error('翻译服务暂不可用，请稍后重试');
     const data = await response.json();
-    if (data.quotaFinished || Number(data.responseStatus) === 429) throw Error('免费翻译额度暂时用完，请稍后再试');
+    if (data.quotaFinished === true || data.quotaFinished === 'true' || Number(data.responseStatus) === 429) throw Error('免费翻译额度暂时用完，请稍后再试');
     if (Number(data.responseStatus) !== 200) throw Error('翻译服务暂不可用，请稍后重试');
     const result = data.responseData?.translatedText;
     if (typeof result !== 'string' || !result.trim() || result.length > 3000 || result.trim() === text || /[\u3400-\u9fff]/.test(result)) throw Error('未能完整翻译，请重新输入或稍后重试');
